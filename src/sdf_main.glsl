@@ -97,7 +97,6 @@ vec4 sdMonster(vec3 p)
 {
     // при рисовании сложного объекта из нескольких SDF, удобно на верхнем уровне 
     // модифицировать p, чтобы двигать объект как целое
-    float time = iTime;
     p -= vec3(0.0, 0.04, 0.0);
     
     vec4 res = sdBody(p);
@@ -110,7 +109,7 @@ vec4 sdMonster(vec3 p)
     float armRadius = 0.03;
     
     vec3 leftArmStart = vec3(-0.15, 0.2, -0.07);
-    vec3 leftArmEnd = vec3(0.05, 0.02, 0.05);
+    vec3 leftArmEnd = vec3(0.05, 0.02, -0.07);
     vec4 leftArm = sdLimb(p - vec3(0.35, 0.3, -0.55),
         leftArmEnd,
         leftArmStart,
@@ -120,8 +119,23 @@ vec4 sdMonster(vec3 p)
     }
     
     vec3 rightArmStart = leftArmStart * vec3(-1.0, 1.0, 1.0);
-    vec3 rightArmEnd = 
-    vec3(0.05, 0.1 + 0.3 * abs(sin(1.8 * time)), 0.15 + 0.1 * abs(sin(1.8 * time))) * vec3(-1.0, 1.0, 1.0);
+    
+    vec3 rightArmEnd = rightArmStart;
+    rightArmEnd *= vec3(-1.0, 1.0, 1.0);
+    
+    
+    float period = 1.3;
+    int periodNum = int(iTime / period);
+    bool isEvenPeriod = (periodNum % 2 == 0);
+    float t = (iTime - float(periodNum) * period);
+    if (!isEvenPeriod) {
+        t = period - t;
+    }
+    
+    float armLength = length(leftArmEnd - leftArmStart);
+    rightArmEnd.y +=  1.4 * sin(t - 0.1) * armLength;
+    rightArmEnd.z += 1.4 * cos(t - 0.1) * armLength;
+    
     
     vec4 rightArm = sdLimb(p - vec3(-0.35, 0.3, -0.55),
         rightArmEnd,
