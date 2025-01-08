@@ -1,4 +1,6 @@
 
+vec3 PLANCTON_COLOR = vec3(124.f / 256.f, 178.f / 256.f , 176.f / 256.f);
+float INF = 1e9;
 // sphere with center in (0, 0, 0)
 float sdSphere(vec3 p, float r)
 {
@@ -28,28 +30,75 @@ float lazycos(float angle)
 // способ сделать гладкий переход между примитивами: https://iquilezles.org/articles/smin/
 vec4 sdBody(vec3 p)
 {
-    float d = 1e10;
+    vec3 pos = (p - vec3(0.0, 0.45, -0.7)) * vec3(1.4, 1, 1.0);
 
-    // TODO
-    d = sdSphere((p - vec3(0.0, 0.35, -0.7)), 0.35);
-    
+
     // return distance and color
-    return vec4(d, vec3(0.0, 1.0, 0.0));
+    return vec4(sdSphere(pos, 0.35), PLANCTON_COLOR);
 }
 
 vec4 sdEye(vec3 p)
 {
+    vec3 pos = p - vec3(0.0, 0.55, -0.45);
 
-    vec4 res = vec4(1e10, 0.0, 0.0, 0.0);
-    
-    return res;
+    float dist = sdSphere(pos, 0.13);
+
+    float rad = length(vec3(pos.x, pos.y, 0.0));
+    if (0.05 < rad) {
+        return vec4(dist, 1.0, 1.0, 1.0);
+    } else {
+        return vec4(dist, 1.0, 0.0, 0.0);
+    } 
 }
+
+
+float sdCapsule( vec3 p, vec3 a, vec3 b, float r )
+{
+  vec3 pa = p - a, ba = b - a;
+  float h = clamp( dot(pa,ba)/dot(ba,ba), 0.0, 1.0 );
+  return length( pa - ba*h ) - r;
+}
+
+vec4 sdLimb(vec3 pos, vec3 limbEnd, vec3 limbStart, float limbRadius)
+{
+
+  return vec4(sdCapsule(pos, limbEnd, limbStart, limbRadius), PLANCTON_COLOR);
+}
+
+
+float sdCone( vec3 p, vec2 c, float h )
+{
+  float q = length(p.xz);
+  return max(dot(c.xy,vec2(q,p.y)),-h-p.y);
+}
+
+vec4 sdTentacle(vec3 pos, vec2 c, float h)
+{
+
+  return vec4(sdCone(pos, c, h), PLANCTON_COLOR);
+}
+
+float sdCappedTorus( vec3 p, vec2 sc, float ra, float rb)
+{
+  p.x = abs(p.x);
+  float k = (sc.y*p.x>sc.x*p.y) ? dot(p.xy,sc) : length(p.xy);
+  return sqrt( dot(p,p) + ra*ra - 2.0*ra*k ) - rb;
+}
+
+vec4 sdMouth(vec3 p)
+{
+    vec3 pos = p;
+
+    return vec4(sdCappedTorus(pos, vec2(-0.3, 0.4), 0.2, 0.01), 0.0, 0.0, 0.0);
+}
+
 
 vec4 sdMonster(vec3 p)
 {
     // при рисовании сложного объекта из нескольких SDF, удобно на верхнем уровне 
     // модифицировать p, чтобы двигать объект как целое
-    p -= vec3(0.0, 0.08, 0.0);
+    float time = iTime;
+    p -= vec3(0.0, 0.04, 0.0);
     
     vec4 res = sdBody(p);
     
@@ -58,12 +107,75 @@ vec4 sdMonster(vec3 p)
         res = eye;
     }
     
+    float armRadius = 0.03;
+    
+    vec3 leftArmStart = vec3(-0.15, 0.2, -0.07);
+    vec3 leftArmEnd = vec3(0.05, 0.02, 0.05);
+    vec4 leftArm = sdLimb(p - vec3(0.35, 0.3, -0.55),
+        leftArmEnd,
+        leftArmStart,
+        armRadius);
+    if (leftArm.x < res.x) {
+        res = leftArm;
+    }
+    
+    vec3 rightArmStart = leftArmStart * vec3(-1.0, 1.0, 1.0);
+    vec3 rightArmEnd = 
+    vec3(0.05, 0.1 + 0.3 * abs(sin(1.8 * time)), 0.15 + 0.1 * abs(sin(1.8 * time))) * vec3(-1.0, 1.0, 1.0);
+    
+    vec4 rightArm = sdLimb(p - vec3(-0.35, 0.3, -0.55),
+        rightArmEnd,
+        rightArmStart,
+        armRadius);
+    if (rightArm.x < res.x) {
+        res = rightArm;
+    }
+    
+    
+    float legRadius = 0.02;
+    vec3 leftLegStart = vec3(-0.3, 0.0, 0.05);
+    vec3 leftLegEnd = vec3(-0.3, -0.2, 0.05);
+    vec4 leftLeg = sdLimb(p - vec3(0.35, 0.3, -0.55),
+        leftLegEnd,
+        leftLegStart,
+        legRadius);
+    if (leftLeg.x < res.x) {
+        res = leftLeg;
+    }
+    
+    vec3 rightLegStart = leftLegStart  * vec3(-1.0, 1.0, 1.0);
+    vec3 rightLegEnd = leftLegEnd * vec3(-1.0, 1.0, 1.0);
+    vec4 rightLeg = sdLimb(p - vec3(-0.35, 0.3, -0.55),
+        rightLegEnd,
+        rightLegStart,
+        legRadius);
+    if (rightLeg.x < res.x) {
+        res = rightLeg;
+    }
+    
+    vec4 leftTentacle = sdTentacle(p - vec3(0.05, 1.2, -0.55), vec2(0.85, 0.04), 0.45);
+    if (leftTentacle.x < res.x) {
+        res = leftTentacle;
+    }
+    
+    vec4 rightTentacle = sdTentacle(p - vec3(-0.05, 1.2, -0.55), vec2(0.85, 0.04), 0.45);
+    if (rightTentacle.x < res.x) {
+        res = rightTentacle;
+    }
+    
+    vec4 mouth = sdMouth(p - vec3(0.0, 0.6, -0.3));
+    
+    if (mouth.x < res.x) {
+    res = mouth;
+    }
+    
     return res;
 }
 
 
 vec4 sdTotal(vec3 p)
 {
+
     vec4 res = sdMonster(p);
     
     
@@ -74,7 +186,6 @@ vec4 sdTotal(vec3 p)
     
     return res;
 }
-
 // see https://iquilezles.org/articles/normalsSDF/
 vec3 calcNormal( in vec3 p ) // for function f(p)
 {
@@ -97,7 +208,7 @@ vec4 raycast(vec3 ray_origin, vec3 ray_direction)
     float t = 0.0;
     
     for (int iter = 0; iter < 200; ++iter) {
-        vec4 res = sdTotal(ray_origin + t*ray_direction);
+        vec4 res = sdTotal(ray_origin + t * ray_direction);
         t += res.x;
         if (res.x < EPS) {
             return vec4(t, res.yzw);
@@ -168,7 +279,7 @@ void mainImage( out vec4 fragColor, in vec2 fragCoord )
     vec3 surface_point = ray_origin + res.x*ray_direction;
     vec3 normal = calcNormal(surface_point);
     
-    vec3 light_source = vec3(1.0 + 2.5*sin(iTime), 10.0, 10.0);
+    vec3 light_source = vec3(1.0 + 2.5*sin(iTime), 15.0, 10.0);
     
     float shad = shading(surface_point, light_source, normal);
     shad = min(shad, castShadow(surface_point, light_source));
